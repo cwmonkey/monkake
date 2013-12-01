@@ -1,0 +1,31 @@
+RewriteEngine On
+
+AddType text/css .css
+
+AddType application/x-javascript .js
+
+AddOutputFilterByType DEFLATE text/text text/html text/plain text/xml text/css application/x-javascript application/javascript
+
+<filesMatch "\.(ico|jpg|gif|jpeg|js|css|png)$">
+Header set Cache-Control "max-age=29030400, public"
+</filesMatch>
+
+# RewriteCond %{HTTP_HOST} ^www.wrestlingwithtext.com [NC]
+# RewriteRule ^(.*)$ http://wrestlingwithtext.com/$1 [L,R=301]
+
+RewriteCond %{REQUEST_URI} ^/css/[0-9]+
+RewriteRule ^css/[0-9]+/(.*)$ /css/compressed/$1 [L]
+
+RewriteCond %{REQUEST_URI} ^/js/[0-9]+
+RewriteRule ^js/[0-9]+/(.*)$ /js/compressed/$1 [L]
+
+RewriteRule ^imgur/(.*)$ http://i.imgur.com/$1 [r=301,nc,L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^.*$ index.php [L]
+
+php_value  display_errors On
+php_value  error_reporting -1
+php_value  max_execution_time 300
+# For new server
+php_value  date.timezone UTC
