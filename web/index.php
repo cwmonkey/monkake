@@ -1,6 +1,6 @@
 <?php
 
-require_once('../monkake/monkake.php');
+require_once('../monkake.php');
 
 M::AddConfig('app/config.php');
 

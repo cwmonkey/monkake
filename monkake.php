@@ -60,7 +60,12 @@ class M {
 		if ( !$route ) {
 			$route = M::Get('route_404_config');
 		} elseif ( isset($route['forward']) ) {
-			header('Location: ' . $route['forward'], true, 301);
+			$forward = $route['forward'];
+			foreach ( $route as $key => $val ) {
+				if ( $key == 'constraints' || $key == 'forward' ) continue;
+				$forward = str_replace(':' . $key, $val, $forward);
+			}
+			header('Location: ' . $forward, true, 301);
 		}
 
 		$request->route = $route;
@@ -72,22 +77,45 @@ class M {
 			$action = @$methods[$request->method];
 		}
 
-		$loading_file = self::Get('monkake_dir') . self::Get('controller_dir') . $controller . self::Get('controller_append');
-		if ( !$loading_file || !file_exists($loading_file) || !require_once($loading_file) ) {
-			throw new Exception('Couldn\'t load controller from ' . $loading_file);
-		}
-
-		$controller_class = explode('/', $controller);
-		$controller_class = array_pop($controller_class);
-		$controller_class = self::Get('controller_prepend') . $controller_class;
-
-		$controller_obj = new $controller_class();
+		$controller_obj = self::GetController($controller);
 
 		if ( !method_exists($controller_obj, M::Get('action_prepend') . $route['action']) ) {
 			throw new Exception('Couldn\'t load action from ' . $loading_file);
 		} else {
 			$controller_obj->Init($request);
 		}
+	}
+
+	public static function GetController($controller) {
+		$controller_class = explode('/', $controller);
+		$controller_class = array_pop($controller_class);
+		$controller_class = self::Get('controller_prepend') . $controller_class;
+
+		if ( !class_exists($controller_class) ) {
+			$loading_file = self::Get('monkake_dir') . self::Get('controller_dir') . $controller . self::Get('controller_append');
+			if ( !$loading_file || !file_exists($loading_file) || !require_once($loading_file) ) {
+				throw new Exception('Couldn\'t load controller from ' . $loading_file);
+			}
+		}
+
+		$controller_obj = new $controller_class();
+		return $controller_obj;
+	}
+
+	public static function GetView($view, $request) {
+		$view_class = explode('/', $view);
+		$view_class = array_pop($view_class);
+		$view_class = self::Get('view_prepend') . $view_class;
+
+		if ( !class_exists($view_class) ) {
+			$loading_file = self::Get('monkake_dir') . self::Get('view_dir') . $view . self::Get('view_append');
+			if ( !$loading_file || !file_exists($loading_file) || !require_once($loading_file) ) {
+				throw new Exception('Couldn\'t load view from ' . $loading_file);
+			}
+		}
+
+		$view_obj = new $view_class($request);
+		return $view_obj;
 	}
 
 	static function _r($path, $route, $config) {
@@ -206,6 +234,14 @@ class M {
 	}
 
 	public static function autoload($name) {
+		if ( strstr($name, '\\') ) {
+			$file = self::Get('monkake_dir') . self::Get('lib_dir') . str_replace('\\', '/', $name) . '.php';
+			if ( file_exists( $file ) ) {
+				require_once($file);
+				return;
+			}
+		}
+
 		$file = self::Get('monkake_dir');
 		$loading_file = null;
 		$class_file = $file . self::Get('class_dir') . $name . self::Get('class_append');
