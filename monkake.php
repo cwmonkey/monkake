@@ -34,9 +34,10 @@ class M {
 		}
 	}
 
-	public static function AddConfig($file) {
+	public static function AddConfig($__file) {
 		self::_init_obj();
-		require($file);
+		require($__file);
+		unset($__file);
 		self::$_m->add_config(get_defined_vars());
 	}
 
@@ -80,7 +81,7 @@ class M {
 		$controller_obj = self::GetController($controller);
 
 		if ( !method_exists($controller_obj, M::Get('action_prepend') . $route['action']) ) {
-			throw new Exception('Couldn\'t load action from ' . $loading_file);
+			throw new Exception('Couldn\'t load action ' . $route['action'] .  ' from ' . $controller);
 		} else {
 			$controller_obj->Init($request);
 		}
@@ -199,6 +200,7 @@ class M {
 			}
 		}
 
+		// $matches[4][0] is the matched component, example /:action
 		if ( isset($matches[4][0]) && $matches[4][0] ) {
 			$path = implode(array_splice($path_components, $i), '/');
 			$new_config = self::_r($path, $matches[4][0], $config);
@@ -242,6 +244,12 @@ class M {
 			}
 		}
 
+		$file = __DIR__ . '/app/lib/' . str_replace('\\', '/', $name) . '.php';
+		if ( file_exists( $file ) ) {
+			require_once($file);
+			return;
+		}
+
 		$file = self::Get('monkake_dir');
 		$loading_file = null;
 		$class_file = $file . self::Get('class_dir') . $name . self::Get('class_append');
@@ -282,6 +290,119 @@ class M {
 
 	private function add_config($config) {
 		$this->_config = array_merge($this->_config, $config);
+	}
+}
+
+class monkake_view {
+	public function RenderCssFiles($css_files, $echo = false) {
+		if ( !is_array($css_files) ) $css_files = array($css_files);
+
+		if ( !M::Get('minify_css') ) {
+			$cssextra = ( M::Get('debug') ) ? '?' . time() : '';
+			foreach ( $css_files as $file ) {
+				if ( strstr($file, '//') ) {
+					echo '<link rel="stylesheet" type="text/css" href="' . $file . $cssextra . '" />';
+				} else {
+					echo '<link rel="stylesheet" type="text/css" href="/css/' . $file . $cssextra . '" />';
+				}
+			}
+			return;
+		}
+
+		$output = '';
+		$lastmod = 0;
+		$files = array();
+
+		foreach ( $css_files as $file ) {
+			$path = M::Get('css_dir') . $file;
+			if ( ($mtime = filemtime($path)) ) {
+				if ( $lastmod < $mtime ) $lastmod = $mtime;
+				$files[] = $file;
+			}
+		}
+
+		if ( $echo ) {
+			foreach ( $files as $file ) {
+				$path = M::Get('css_dir') . $file;
+				$output .= "\n" . file_get_contents($path);
+			}
+
+			echo '<style>' . Minify_CSS_Compressor::process($output) . '</style>';
+		} elseif ( count($files) ) {
+			$filename = M::Get('css_compressed_dir') . md5(implode(',', $files)) . '.css';
+
+			if ( intval(@filemtime($filename)) < $lastmod ) {
+				foreach ( $files as $file ) {
+					$path = M::Get('css_dir') . $file;
+					$output .= "\n" . file_get_contents($path);
+				}
+
+				$fp = fopen($filename, 'w+');
+				fwrite($fp, Minify_CSS_Compressor::process($output));
+				fclose($fp);
+				chmod($filename, 0777);
+			}
+
+			echo '<link rel="stylesheet" type="text/css" href="/css/' . $lastmod . '/' . md5(implode(',', $files)) . '.css" />';
+		}
+	}
+}
+
+class monkake_controller {
+	public function is_mobile() {
+		//$wurflDir = dirname(__FILE__) . '/../lib/WURFL';
+		$wurflDir = M::Get('monkake_dir') . '../../monkake/app/lib/WURFL';
+		//$resourcesDir = dirname(__FILE__) . '/../resources';
+		$resourcesDir = M::Get('monkake_dir') . '../../monkake/app/resources';
+		require_once $wurflDir.'/Application.php';
+		 
+		$persistenceDir = $resourcesDir.'/storage/persistence';
+		$cacheDir = $resourcesDir.'/storage/cache';
+		 
+		// Create WURFL Configuration
+		$wurflConfig = new WURFL_Configuration_InMemoryConfig();
+		 
+		// Set location of the WURFL File
+		$wurflConfig->wurflFile($resourcesDir.'/wurfl.zip');
+		 
+		// Set the match mode for the API ('performance' or 'accuracy')
+		$wurflConfig->matchMode('performance');
+		 
+		// Automatically reload the WURFL data if it changes
+		$wurflConfig->allowReload(true);
+		 
+		// Optionally specify which capabilities should be loaded
+		$wurflConfig->capabilityFilter(array(
+			// "device_os",
+			// "device_os_version",
+			// "is_tablet",
+			"is_wireless_device",
+			// "mobile_browser",
+			// "mobile_browser_version",
+			// "pointing_method",
+			// "preferred_markup",
+			// "resolution_height",
+			// "resolution_width",
+			// "ux_full_desktop",
+			// "xhtml_support_level",
+		));
+		 
+		// Setup WURFL Persistence
+		$wurflConfig->persistence('file', array('dir' => $persistenceDir));
+		 
+		// Setup Caching
+		$wurflConfig->cache('file', array('dir' => $cacheDir, 'expiration' => 36000));
+		 
+		// Create a WURFL Manager Factory from the WURFL Configuration
+		$wurflManagerFactory = new WURFL_WURFLManagerFactory($wurflConfig);
+		 
+		// Create a WURFL Manager
+		/* @var $wurflManager WURFL_WURFLManager */
+		$wurflManager = $wurflManagerFactory->create();
+
+		$requestingDevice = $wurflManager->getDeviceForHttpRequest($_SERVER);
+
+		return ($requestingDevice->getCapability('is_wireless_device') == 'true');
 	}
 }
 
